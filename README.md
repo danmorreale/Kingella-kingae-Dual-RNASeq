@@ -1,6 +1,6 @@
 # _Kingella kingae_ Dual RNA-Seq
-DOI: 
-Morreale, Daniel P., Porsch, Eric A., Planet, Paul J, St. Geme III, Joseph W.
+DOI:  
+Authors: Morreale, Daniel P., Porsch, Eric A., Planet, Paul J, St. Geme III, Joseph W.
 
 University of Pennsylvania
 Childrens Hospital of Philadelphia
@@ -9,7 +9,7 @@ Please contact D. Morreale or J. St. Geme III with questions/concerns.
 
  
 ## Background 
-This repository contains the data and code used for the analysis of the Dual-RNA seq data reported in "TITLE" (Morreale _et al._, BioRxIV DOI:). Below you will find a detailed methods section for the analysis, which can also be found in the manuscript. Read data can be found in the [Sequence Read Archive] (https://www.ncbi.nlm.nih.gov/sra) in the BioProject XXX. Please contact the authors with any questions/concerns. 
+This repository contains the data and code used for the analysis of the Dual-RNA seq data reported in "TITLE" (Morreale _et al._, BioRxIV DOI:). Below you will find a detailed methods section for the analysis, which can also be found in the manuscript. Read data can be found in the [Sequence Read Archive](https://www.ncbi.nlm.nih.gov/sra) in the BioProject **PRJNA978100**. Please contact the authors with any questions/concerns. 
 
 
 ## Methods
@@ -111,4 +111,4 @@ For both species, data were grouped by replicate, treatment (+/- KK01), and hour
 - ./scripts/Human_pipe.R -- R Script used to analyse Calu-specific reads for differential expression alaysis and graphics.
 
 ## Acknowledgments 
-We would like to thank Clara Malekshahi and Daniel Beiting for their assistance with library preparation and seuqencing. Sequencing was performed in collaboration with the Center for Host-Microbial Interations at the University of Pennsylvania School of Veterinary Medicine. R-Scripts used for this analysis were originally written by D. Beiting as part of the curriculum for the [DIYTranscriptomics] (https://diytranscriptomics.com/) course. Sections are heavily modified to accomodate our experimental design and several analyses have been added to address specific questions. 
+We would like to thank Clara Malekshahi and Daniel Beiting for their assistance with library preparation and seuqencing. Sequencing was performed in collaboration with the Center for Host-Microbial Interations at the University of Pennsylvania School of Veterinary Medicine. R-Scripts used for this analysis were originally written by D. Beiting as part of the curriculum for the [DIYTranscriptomics](https://diytranscriptomics.com/) course. Sections are heavily modified to accomodate our experimental design and several analyses have been added to address specific questions. 
