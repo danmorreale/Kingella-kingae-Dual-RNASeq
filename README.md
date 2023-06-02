@@ -71,7 +71,9 @@ Duplicate samples (technical replicates) were pooled for quality control and lib
 |36|4_C14|14|Human|6.6|25.9|4|
 ||||||*From Tapestation||
 ### Library Preparation and Sequencing
+Sequencing libraries were prepared from 10 ng of input RNA. Libraries were constructed using the Takara-Clontech total RNA pico mammalian v3 kit. Samples were fragmented with Clontech SMART-Seq HT kit (Takara), and SMARTScript reverse transcriptase was used for first strand synthesis with random primers. cDNA libraries were indexed prior to clean-up by AMPure beads purificaiton. Ribosomal cDNAs were depleted with ZapR and R-Probes v2. SeqAMP was used to amplify the final cDNA libraries. Library quality and concentrations were quantified with the TapeStation HSD1000 kit and Qubit HS dsDNA kit, respectively.
 
+Sequencing was perforemd on the NovaSeq 2000 (Illumina). Samples were normalized by input cDNA, and run on a P3 100 cycle kit using single end 120x8x8 reads (120 bp single end reads, 8 bp dual indexes). 
 
 ### Bioinformatics
 #### Reference genomes
