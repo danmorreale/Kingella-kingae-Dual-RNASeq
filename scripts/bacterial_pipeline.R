@@ -10,6 +10,22 @@
 
 # Load Packages required for this script.----
 # This includes all packages required to run this script
+if (!require("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+
+
+bio_pkgs <- c('DESeq2','GOSemSim','GO.db','limma','ComplexHeatmap',
+              'AnnotationDbi','GenomeInfoDb','GenomicRanges','Biobase','S4Vectors',
+              'BiocGenerics','MatrixGenerics','IRanges','BiocFileCache',
+              'SummarizedExperiment','org.Hs.eg.db','org.Mm.eg.db','org.Ce.eg.db',
+              'tximport','tximportData', "tximport", "ensembldb", "edgeR", "rhdf5")
+
+BiocManager::install(bio_pkgs, force = T)
+
+install.packages(c("devtools", "pheatmap", "tidyverse", "matrixStats", "cowplot", "DT", "plotly", "gt", "beepr", "RColorBrewer", "gplots", "ggplot2", "ggrepel"))
+
+library(devtools)
+library(rhdf5)
 library(tidyverse) 
 library(tximport) 
 library(ensembldb) 
@@ -23,11 +39,15 @@ library(limma)
 library(beepr)
 library(RColorBrewer)
 library(gplots) 
-library(heatmaply)
-
+library(ggplot2)
+library(ggrepel)
+library(DESeq2)
+library(pheatmap)
+library(reshape2)
 
 # Read in reports----
 # Code in this code chunk written and distributed by D. Beiting in "Step1_TxImport.R"
+setwd("/Users/danielmorreale/RNA_seq/kallisto/KK01")
 targets <- read_tsv("study_design.txt")# read in your study design
 path <- file.path(targets$sample, "abundance.tsv") # set file paths to your mapped data
 trans_to_genes <- read_tsv("KK01_genenames.txt")
@@ -36,7 +56,7 @@ Tx <- as_tibble(trans_to_genes)
 Txi_gene <- tximport(path, 
                      type = "kallisto", 
                      tx2gene = Tx, 
-                     txOut = FALSE, # Since bacteiral transcript = genes, will change gene names later.
+                     txOut = FALSE, # If you want to get the locus tags, comment out the above line, and change this operator to true.
                      countsFromAbundance = "lengthScaledTPM",
                      ignoreTxVersion = TRUE)
 
@@ -46,8 +66,12 @@ sampleLabels <- targets$Name
 myDGEList <- DGEList(Txi_gene$counts)
 log2.cpm <- cpm(myDGEList, log=TRUE)
 
+
+
 log2.cpm.df <- as_tibble(log2.cpm, rownames = "geneID")
 colnames(log2.cpm.df) <- c("geneID", sampleLabels)
+write.csv(log2.cpm.df, file = "log2_CPM_KK01.csv", row.names = TRUE)
+
 log2.cpm.df.pivot <- pivot_longer(log2.cpm.df, # dataframe to be pivoted
                                   cols = Infected_1hpi_1:Uninfected_14hpi_4, # column names to be stored as a SINGLE variable
                                   names_to = "samples", # name of that new variable (column)
@@ -66,7 +90,8 @@ p1 <- ggplot(log2.cpm.df.pivot) +
          title="Log2 Counts per Million (CPM)",
          subtitle="unfiltered, non-normalized",
          caption=paste0("produced on ", Sys.time())) +
-    theme_bw()
+    theme_bw() + 
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 cpm <- cpm(myDGEList)
 keepers <- rowSums(cpm>1)>=20 #USER DEFINED AND CAN BE CHANGED, this is selecting those w/ CPM > 1 for 5 or more of the samples
@@ -135,6 +160,21 @@ pc.var <- pca.res$sdev^2 # sdev^2 captures these eigenvalues from the PCA result
 pc.per <- round(pc.var/sum(pc.var)*100, 1) 
 pca.res.df <- as_tibble(pca.res$x)
 
+library(uwot)
+umap_df <- as.data.frame(umap(pca.res.df))
+colnames(umap_df) <- c("UMAP1", "UMAP2")
+umap_df$sample <- rownames(pca.res.df)
+
+umap_plot <- ggplot(umap_df, aes(x=UMAP1, y=UMAP2, label=sampleLabels, fill = Treatment, shape = Time)) +
+  geom_point(size = 4, color = "black") +
+  theme_classic() +
+  scale_shape_manual(values = c("hpi_1" = 21, "hpi_8" = 22, "hpi_14" = 23)) + 
+  scale_fill_manual(values = c("Infected" = "red", "Uninfected" = "blue"))
+ggsave(filename = "umap_plot.svg", plot = umap_plot)
+  
+dev.off()
+
+
 pca.plot.Replicate <- ggplot(pca.res.df) + #Check to see the data PCA distribution when groups are defined by Replicate (batch effect)
   aes(x=PC1, y=PC2, label=sampleLabels, color = Replicate) +
   geom_point(size=4) +
@@ -145,7 +185,7 @@ pca.plot.Replicate <- ggplot(pca.res.df) + #Check to see the data PCA distributi
   coord_fixed() +
   theme_bw()
 
-#ggplotly(pca.plot.Replicate) ##Uncomment if you want an interactive PCA plot
+
 
 pca.plot.Treatment <- ggplot(pca.res.df) + #Check to see the data PCA distribution when groups are defined by treatment
   aes(x=PC1, y=PC2, label=sampleLabels, color = Treatment) +
@@ -157,11 +197,7 @@ pca.plot.Treatment <- ggplot(pca.res.df) + #Check to see the data PCA distributi
   coord_fixed() +
   theme_bw()
 
-# ggplotly(pca.plot.Treatment) ##Uncomment if you want an interactive PCA plot
 
-# Replicate2 <- factor(targets$replicate)
-# Time2 <- factor(targets$hpi)
-# design2 <- model.matrix(~0+Time)
 pca.plot.Time <- ggplot(pca.res.df) + #Check to see the data PCA distribution when groups are defined by treatment
   aes(x=PC1, y=PC2, label=sampleLabels, color = Time, linetype = Treatment) +
   geom_point(size=2) +
@@ -171,7 +207,7 @@ pca.plot.Time <- ggplot(pca.res.df) + #Check to see the data PCA distribution wh
   labs(title="PCA plot") +
   coord_fixed() +
   theme_bw()
-ggplotly(pca.plot.Time) ##Uncomment if you want an interactive PCA plot
+
 
 plot_grid(pca.plot.Replicate, pca.plot.Treatment, pca.plot.Time, labels = c('A', 'B', "C"), label_size = 12, cols = TRUE)
 
@@ -183,11 +219,10 @@ mydata.df <- mutate(log2.cpm.filtered.norm.df,
   infected_1hpi.AVG = (Infected_1hpi_1 + Infected_1hpi_2 + Infected_1hpi_3 + Infected_1hpi_4)/4, 
   infected_8hpi.AVG = (Infected_8hpi_1 + Infected_8hpi_2 + Infected_8hpi_3 + Infected_8hpi_4)/4,
   infected_14hpi.AVG = (Infected_14hpi_1 + Infected_14hpi_2 + Infected_14hpi_3 + Infected_14hpi_4)/4,
-  #now make columns comparing each of the averages above that you're interested in
-  LogFC_1hpi = (infected_1hpi.AVG - uninfected_1hpi.AVG),
-  LogFC_8hpi = (infected_8hpi.AVG - uninfected_8hpi.AVG),
-  LogFC_14hpi = (infected_14hpi.AVG - uninfected_14hpi.AVG)) %>% #note that this is the first time you've seen the 'pipe' operator
-    mutate_if(is.numeric, round, 2)
+  #now make columns comparing each of the averages above that you're interested in #####SHOULD THIS BE A SUBTRACT OR DIVIDE
+  LogFC_1hpi = (infected_1hpi.AVG / uninfected_1hpi.AVG),
+  LogFC_8hpi = (infected_8hpi.AVG / uninfected_8hpi.AVG),
+  LogFC_14hpi = (infected_14hpi.AVG / uninfected_14hpi.AVG))
 
 # Create an CSV file (open with excel) of just the average log-fold change at each time point of interest, normalized by the uninfected control
 datatable(mydata.df[,c(1,32:34)], 
@@ -204,8 +239,8 @@ datatable(mydata.df[,c(1,32:34)],
 mydata.sort <- mydata.df %>%
   dplyr::arrange(desc(LogFC_14hpi)) %>% 
     dplyr::select(geneID, LogFC_1hpi, LogFC_8hpi, LogFC_14hpi)
-write.csv(mydata.sort, "/Users/danielmorreale/RNA_seq/kallisto/Calu3_FC_sorted.csv", row.names=FALSE)
-
+#write.csv(mydata.sort, "/Users/danielmorreale/RNA_seq/kallisto/01042024_KK01_FC_sorted.csv", row.names=FALSE)
+write.csv(mydata.sort, "/Users/danielmorreale/RNA_seq/kallisto/01042024_KK01_FC_sorted_locustagged.csv", row.names=FALSE)
 
 # Differentially Expressed Genes----
 # Code in this code chunk written and distributed by D. Beiting in "Step5_diffGenes.R" but with heavy modifications.
@@ -213,11 +248,10 @@ write.csv(mydata.sort, "/Users/danielmorreale/RNA_seq/kallisto/Calu3_FC_sorted.c
 Replicate <- factor(targets$replicate)
 Treatment <- factor(targets$Treatment)
 Time <- factor(targets$hpi)
-design <- model.matrix(~0+Time:Treatment)
+design <- model.matrix(~ 0 + Time:Treatment)
 colnames(design) <- gsub(":","_",colnames(design))
 # Use limma to make a mean-variance model and plot the graph interactively. If you want it to run without plot, set "Plot = FALSE"
-v.DEGList.filtered.norm <- voom(myDGEList.filtered.norm, design, plot = TRUE)
-fit <- lmFit(v.DEGList.filtered.norm, design)
+tfit <- lmFit(log2.cpm.filtered.norm, design)
 
 # Set up the pairwise comparisons you want to make
 contrast.matrix <- makeContrasts(hpi_1 = Timehpi_1_TreatmentInfected - Timehpi_1_TreatmentUninfected,
@@ -228,9 +262,9 @@ contrast.matrix <- makeContrasts(hpi_1 = Timehpi_1_TreatmentInfected - Timehpi_1
                                  levels=design) # as many as you want...just add them above this line.
 
 
-fits <- contrasts.fit(fit, contrast.matrix)
+fits <- contrasts.fit(tfit, contrast.matrix)
 ebFit <- eBayes(fits) # get bayesian stats for your linear model fit
-write.fit(ebFit, file="lmfit_results.txt")
+write.fit(ebFit, file="lmfit_results_01092024.txt")
 
 # Notes:
 # "adjust" is the correction model you are going to use to get your gene list, "BH" is Benjamini-Hocheberg
@@ -240,73 +274,84 @@ write.fit(ebFit, file="lmfit_results.txt")
 myTopHits_hpi_1 <- topTable(ebFit, adjust ="BH", coef=1, number=40000, sort.by="p") 
 myTopHits_hpi_8 <- topTable(ebFit, adjust ="BH", coef=2, number=40000, sort.by="p") 
 myTopHits_hpi_14 <- topTable(ebFit, adjust ="BH", coef=3, number=40000, sort.by="p") 
-myTopHits_hpi_14rel1 <- topTable(ebFit, adjust ="BH", coef=4, number=40000, sort.by="p") 
-myTopHits_hpi_8rel1 <- topTable(ebFit, adjust ="BH", coef=5, number=40000, sort.by="p") 
+
 
 # Make a table of the boys
-myTopHits_hpi_1.df <- myTopHits_hpi_1 %>% # This will need to be adjusted to match the above list.
+##For locus tags
+myTopHits_hpi_1.df <- cbind(rownames(myTopHits_hpi_1), data.frame(myTopHits_hpi_1, row.names=NULL))
+myTopHits_hpi_8.df <- cbind(rownames(myTopHits_hpi_8), data.frame(myTopHits_hpi_8, row.names=NULL))
+myTopHits_hpi_14.df <- cbind(rownames(myTopHits_hpi_14), data.frame(myTopHits_hpi_14, row.names=NULL))
+
+
+##For gene names
+myTopHits_hpi_1.df <- myTopHits_hpi_1 %>% # This will need to be adjusted to match the above list.)
   as_tibble(rownames = "geneID")
 myTopHits_hpi_8.df <- myTopHits_hpi_8 %>% # This will need to be adjusted to match the above list.
   as_tibble(rownames = "geneID")
 myTopHits_hpi_14.df <- myTopHits_hpi_14 %>% # This will need to be adjusted to match the above list.
   as_tibble(rownames = "geneID")
-myTopHits_hpi_14rel1.df <- myTopHits_hpi_14rel1 %>% # This will need to be adjusted to match the above list.
-  as_tibble(rownames = "geneID")
-myTopHits_hpi_8rel1.df <- myTopHits_hpi_8rel1 %>% # This will need to be adjusted to match the above list.
-  as_tibble(rownames = "geneID")
 
+
+write_tsv(myTopHits_hpi_1.df, "01092023_tophits_DE_genes_1hpi_infectvsuninfected.txt")
+write_tsv(myTopHits_hpi_8.df, "01092023_tophits_DE_genes_8hpi_infectvsuninfected.txt")
+write_tsv(myTopHits_hpi_14.df, "01092023_tophits_DE_genes_14hpi_infectvsuninfected.txt")
 
 # Volcano plot it! Celebrate!! :)
 vplot_1hpi <- ggplot(myTopHits_hpi_1.df) +
   aes(y=-log10(adj.P.Val), x=logFC, text = paste("Symbol:", geneID)) +
-  geom_point(size=2) +
-  geom_hline(yintercept = -log10(0.05), linetype=3, colour="grey", size=1) +
-  geom_vline(xintercept = 1, linetype=3, colour="#BE684D", linewidth=1) +
-  geom_vline(xintercept = -1, linetype=3, colour="#2C467A", linewidth=1) +
-  labs(subtitle="Differentially Expressed genes at 1 h.p.i. infected relative to control", label_size=6) +
-  theme_bw()
+  geom_point(color = dplyr::case_when(myTopHits_hpi_1.df$logFC > 1 ~ "red", myTopHits_hpi_1.df$logFC < -1 ~ "blue", TRUE ~ "gray"), size=2) +
+  geom_hline(yintercept = -log10(0.05), linetype = "dotted", color="grey") +
+  geom_vline(xintercept = 1, linetype = "dotted", color="red") +
+  geom_vline(xintercept = -1, linetype = "dotted", color="blue") +
+  geom_text_repel(aes(label=ifelse(-log10(adj.P.Val) > 2,
+                             ifelse(logFC > 1,as.character(geneID),''), ''))) +
+  geom_text_repel(aes(label=ifelse(-log10(adj.P.Val) > 2,
+                                   ifelse(logFC < -1,as.character(geneID),''), ''))) +
+  labs(subtitle="Differentially Expressed genes at 1 h.p.i.") +
+  theme_bw() +
+  theme(aspect.ratio = 1)
 
 vplot_8hpi <- ggplot(myTopHits_hpi_8.df) +
   aes(y=-log10(adj.P.Val), x=logFC, text = paste("Symbol:", geneID)) +
-  geom_point(size=2) +
-  geom_hline(yintercept = -log10(0.05), linetype=3, colour="grey", size=1) +
-  geom_vline(xintercept = 1, linetype=3, colour="#BE684D", linewidth=1) +
-  geom_vline(xintercept = -1, linetype=3, colour="#2C467A", linewidth=1) +
-  labs(subtitle="Differentially Expressed genes at 14 h.p.i. infected relative to control", label_size=6) +
-  theme_bw()
+  geom_point(color = dplyr::case_when(myTopHits_hpi_8.df$logFC > 1 ~ "red", myTopHits_hpi_8.df$logFC < -1 ~ "blue", TRUE ~ "gray"), size=2) +
+  geom_hline(yintercept = -log10(0.05), linetype = "dotted", color="grey") +
+  geom_vline(xintercept = 1, linetype = "dotted", color="red") +
+  geom_vline(xintercept = -1, linetype = "dotted", color="blue") +
+  geom_text_repel(aes(label=ifelse(-log10(adj.P.Val)>2, 
+                                   ifelse(logFC>1,as.character(geneID),''), ''))) +
+  geom_text_repel(aes(label=ifelse(-log10(adj.P.Val)>2, 
+                                   ifelse(logFC< -1,as.character(geneID),''), ''))) +
+  labs(subtitle="Differentially Expressed genes at 8 h.p.i.") +
+  theme_bw() +
+  theme(aspect.ratio = 1)
+
 
 vplot_14hpi <- ggplot(myTopHits_hpi_14.df) +
   aes(y=-log10(adj.P.Val), x=logFC, text = paste("Symbol:", geneID)) +
-  geom_point(size=2) +
-  geom_hline(yintercept = -log10(0.05), linetype=3, colour="grey", size=1) +
-  geom_vline(xintercept = 1, linetype=3, colour="#BE684D", linewidth=1) +
-  geom_vline(xintercept = -1, linetype=3, colour="#2C467A", linewidth=1) +
-  labs(subtitle="Differentially Expressed genes at 14 h.p.i. infected relative to control", label_size=6) +
-  theme_bw()
-ggplotly(vplot_14hpi)
+  geom_point(color = dplyr::case_when(myTopHits_hpi_14.df$logFC > 1 ~ "red", myTopHits_hpi_14.df$logFC < -1 ~ "blue", TRUE ~ "gray"), size=2) +
+  geom_hline(yintercept = -log10(0.05), linetype = "dotted", color="grey") +
+  geom_vline(xintercept = 1, linetype = "dotted", color="red") +
+  geom_vline(xintercept = -1, linetype = "dotted", color="blue") +
+  geom_text_repel(aes(label=ifelse(-log10(adj.P.Val)>2, 
+                                   ifelse(logFC>1,as.character(geneID),''), ''))) +
+  geom_text_repel(aes(label=ifelse(-log10(adj.P.Val)>2, 
+                                   ifelse(logFC< -1,as.character(geneID),''), ''))) +
+  labs(subtitle="Differentially Expressed genes at 14 h.p.i.") +
+  theme_bw() +
+  theme(aspect.ratio = 1)
 
-vplot_8hpirel1 <- ggplot(myTopHits_hpi_8rel1.df) +
-  aes(y=-log10(adj.P.Val), x=logFC, text = paste("Symbol:", geneID)) +
-  geom_point(size=2) +
-  geom_hline(yintercept = -log10(0.05), linetype=3, colour="grey", size=1) +
-  geom_vline(xintercept = 1, linetype=3, colour="#BE684D", linewidth=1) +
-  geom_vline(xintercept = -1, linetype=3, colour="#2C467A", linewidth=1) +
-  labs(subtitle="Differentially Expressed genes at 8 h.p.i. relative to 1 h.p.i", label_size=6) +
-  theme_bw()
 
-vplot_14hpirel1 <- ggplot(myTopHits_hpi_14rel1.df) +
-  aes(y=-log10(adj.P.Val), x=logFC, text = paste("Symbol:", geneID)) +
-  geom_point(size=2) +
-  geom_hline(yintercept = -log10(0.05), linetype=3, colour="grey", size=1) +
-  geom_vline(xintercept = 1, linetype=3, colour="#BE684D", linewidth=1) +
-  geom_vline(xintercept = -1, linetype=3, colour="#2C467A", linewidth=1) +
-  labs(subtitle="Volcano plot - Differentially Expressed genes at 14 h.p.i. relative to 1 h.p.i", label_size=6) +
-  theme_bw()
 
 # Make a figure
-plot_grid(vplot_1hpi, vplot_8hpi, vplot_14hpi, vplot_8hpirel1, vplot_14hpirel1, labels = c('A', 'B', 'C', 'D', 'E'), label_size = 12)
+volcano_out <- cowplot::plot_grid(plotlist = c(vplot_1hpi, vplot_8hpi, vplot_14hpi))
+ggsave(filename = "volcano_plots_final.svg", plot = volcano_out, height = 12, width = 12)
+
+ggsave(filename = "volcano_plots_final_1.svg", plot = vplot_1hpi, height = 12, width = 12)
+ggsave(filename = "volcano_plots_final_8.svg", plot = vplot_8hpi, height = 12, width = 12)
+ggsave(filename = "volcano_plots_final_14.svg", plot = vplot_14hpi, height = 12, width = 12)
 
 
+v.DEGList.filtered.norm <- voom(myDGEList.filtered.norm, design, plot = TRUE)
 results <- decideTests(ebFit, method="global", adjust.method="BH", p.value=0.05, lfc=1)
 summary(results) ## See what you got
 
@@ -318,10 +363,7 @@ diffGenes_8 <- v.DEGList.filtered.norm$E[results[,2] !=0,]
 diffGenes_8.df <- as_tibble(diffGenes_8[,c("Infected_8hpi_1", "Infected_8hpi_2", "Infected_8hpi_3", "Infected_8hpi_4", "Uninfected_8hpi_1", "Uninfected_8hpi_2", "Uninfected_8hpi_3", "Uninfected_8hpi_4")], rownames = "geneID")
 diffGenes_14 <- v.DEGList.filtered.norm$E[results[,3] !=0,]
 diffGenes_14.df <- as_tibble(diffGenes_14[,c("Infected_14hpi_1", "Infected_14hpi_2", "Infected_14hpi_3", "Infected_14hpi_4", "Uninfected_14hpi_1", "Uninfected_14hpi_2", "Uninfected_14hpi_3", "Uninfected_14hpi_4")], rownames = "geneID")
-diffGenes_8rel1 <- v.DEGList.filtered.norm$E[results[,5] !=0,]
-diffGenes_8rel1.df <- as_tibble(diffGenes_8rel1[,c("Infected_1hpi_1", "Infected_1hpi_2", "Infected_1hpi_3", "Infected_1hpi_4", "Uninfected_1hpi_1", "Uninfected_1hpi_2", "Uninfected_1hpi_3", "Uninfected_1hpi_4", "Infected_8hpi_1", "Infected_8hpi_2", "Infected_8hpi_3", "Infected_8hpi_4", "Uninfected_8hpi_1", "Uninfected_8hpi_2", "Uninfected_8hpi_3", "Uninfected_8hpi_4")], rownames = "geneID")
-diffGenes_14rel1 <- v.DEGList.filtered.norm$E[results[,4] !=0,]
-diffGenes_14rel1.df <- as_tibble(diffGenes_14rel1, rownames = "geneID")
+
 
 # Makes some tables that are interactive in R studio
 datatable(diffGenes_1.df,
@@ -339,24 +381,11 @@ datatable(diffGenes_14.df,
           caption = 'Table 1: DEGs in [CONDITION]',
           options = list(keys = TRUE, searchHighlight = TRUE, pageLength = 10, lengthMenu = c("10", "25", "50", "100"))) %>%
   formatRound(columns=c(2:11), digits=2)
-# datatable(diffGenes_8rel1.df,
-#           extensions = c('KeyTable', "FixedHeader"),
-#           caption = 'Table 1: DEGs in [CONDITION]',
-#           options = list(keys = TRUE, searchHighlight = TRUE, pageLength = 10, lengthMenu = c("10", "25", "50", "100"))) %>%
-#   formatRound(columns=c(2:11), digits=2)
-# datatable(diffGenes_14rel1.df,
-#           extensions = c('KeyTable', "FixedHeader"),
-#           caption = 'Table 1: DEGs in [CONDITION]',
-#           options = list(keys = TRUE, searchHighlight = TRUE, pageLength = 10, lengthMenu = c("10", "25", "50", "100"))) %>%
-#   formatRound(columns=c(2:11), digits=2)
 
-write_tsv(diffGenes_1.df, "DE_genes_1hpi_infectvsuninfected.txt")
-write_tsv(diffGenes_8.df, "DE_genes_8hpi_infectvsuninfected.txt")
-write_tsv(diffGenes_14.df, "DE_genes_14hpi_infectvsuninfected.txt")
-# write_tsv(diffGenes_8rel1.df, "DE_genes_8hpivs1hpi.txt")
-# write_tsv(diffGenes_14rel1.df, "DE_genes_14hpivs1hpi.txt")
 
-beepr::beep(sound=8)
+write_tsv(diffGenes_1.df, "2025_DE_genes_1hpi_infectvsuninfected.txt")
+write_tsv(diffGenes_8.df, "2025_DE_genes_8hpi_infectvsuninfected.txt")
+write_tsv(diffGenes_14.df, "2025_DE_genes_14hpi_infectvsuninfected.txt")
 
 
 # Make a heatmap ----
@@ -366,99 +395,85 @@ myheatcolors <- colorRampPalette(colors=c("blue","white","red"))(100)
 diffGenes_1_subset <- diffGenes_1[,c("Infected_1hpi_1", "Infected_1hpi_2", "Infected_1hpi_3", "Infected_1hpi_4", "Uninfected_1hpi_1", "Uninfected_1hpi_2", "Uninfected_1hpi_3", "Uninfected_1hpi_4")]
 diffGenes_8_subset <- diffGenes_8[,c("Infected_8hpi_1", "Infected_8hpi_2", "Infected_8hpi_3", "Infected_8hpi_4", "Uninfected_8hpi_1", "Uninfected_8hpi_2", "Uninfected_8hpi_3", "Uninfected_8hpi_4")]
 diffGenes_14_subset <- diffGenes_14[,c("Infected_14hpi_1", "Infected_14hpi_2", "Infected_14hpi_3", "Infected_14hpi_4", "Uninfected_14hpi_1", "Uninfected_14hpi_2", "Uninfected_14hpi_3", "Uninfected_14hpi_4")]
-diffGenes_8vs1_subset <- diffGenes_8rel1[,c("Infected_1hpi_1", "Infected_1hpi_2", "Infected_1hpi_3", "Infected_1hpi_4", "Uninfected_1hpi_1", "Uninfected_1hpi_2", "Uninfected_1hpi_3", "Uninfected_1hpi_4", "Infected_8hpi_1", "Infected_8hpi_2", "Infected_8hpi_3", "Infected_8hpi_4", "Uninfected_8hpi_1", "Uninfected_8hpi_2", "Uninfected_8hpi_3", "Uninfected_8hpi_4")]
 diffGenes_allTP <- diffGenes_1[,c("Infected_1hpi_1", "Infected_1hpi_2", "Infected_1hpi_3", "Infected_1hpi_4", "Infected_8hpi_1", "Infected_8hpi_2", "Infected_8hpi_3", "Infected_8hpi_4", "Infected_14hpi_1", "Infected_14hpi_2", "Infected_14hpi_3", "Infected_14hpi_4", "Uninfected_1hpi_1", "Uninfected_1hpi_2", "Uninfected_1hpi_3", "Uninfected_1hpi_4", "Uninfected_8hpi_1", "Uninfected_8hpi_2", "Uninfected_8hpi_3", "Uninfected_8hpi_4", "Uninfected_14hpi_1", "Uninfected_14hpi_2", "Uninfected_14hpi_3", "Uninfected_14hpi_4")]
 
-clustRows_1hpi <- hclust(as.dist(1-cor(t(diffGenes_1_subset), method="pearson")), method="complete")
-clustRows_8hpi <- hclust(as.dist(1-cor(t(diffGenes_8_subset), method="pearson")), method="complete")
-clustRows_14hpi <- hclust(as.dist(1-cor(t(diffGenes_14_subset), method="pearson")), method="complete")
-clustRows_8vs1hpi <- hclust(as.dist(1-cor(t(diffGenes_8vs1_subset), method="pearson")), method="complete")
-clustRows <- hclust(as.dist(1-cor(t(diffGenes_allTP), method="pearson")), method="complete")
+clustRows_1hpi <- hclust(as.dist(1-cor(t(diffGenes_1_subset), method="spearman")), method="complete")
+clustRows_8hpi <- hclust(as.dist(1-cor(t(diffGenes_8_subset), method="spearman")), method="complete")
+clustRows_14hpi <- hclust(as.dist(1-cor(t(diffGenes_14_subset), method="spearman")), method="complete")
+clustRows <- hclust(as.dist(1-cor(t(diffGenes_allTP), method="spearman")), method="complete")
 
-clustColumns_1hpi <- hclust(as.dist(1-cor(diffGenes_1[,c("Infected_1hpi_1", "Infected_1hpi_2", "Infected_1hpi_3", "Infected_1hpi_4", "Uninfected_1hpi_1", "Uninfected_1hpi_2", "Uninfected_1hpi_3", "Uninfected_1hpi_4")], method="spearman")), method="complete")
+clustColumns_1hpi <- hclust(as.dist(1-cor(diffGenes_1_subset, method="spearman")), method="complete")
 clustColumns_8hpi <- hclust(as.dist(1-cor(diffGenes_8_subset, method="spearman")), method="complete")
 clustColumns_14hpi <- hclust(as.dist(1-cor(diffGenes_14_subset, method="spearman")), method="complete")
-clustColumns_8vs1hpi <- hclust(as.dist(1-cor(t(diffGenes_8vs1_subset), method="pearson")), method="complete")
 clustColumns <- hclust(as.dist(1-cor(diffGenes_allTP, method="spearman")), method="complete")
 
-module.assign_1hpi <- cutree(clustRows_1hpi, k=2)
-module.assign_8hpi <- cutree(clustRows_8hpi, k=4)
-module.assign_14hpi <- cutree(clustRows_14hpi, k=2)
-module.assign_8vs1hpi <- cutree(clustRows_8vs1hpi, k=2)
-
-
-
-heatmap_1hpi <- heatmap.2(diffGenes_1_subset,
-          Rowv=as.dendrogram(clustRows_1hpi),
-          Colv=as.dendrogram(clustColumns_1hpi),
-          col=myheatcolors, scale='row', labRow=TRUE,
-          density.info="none", trace="none",
-          cexRow=1, cexCol=1, margins=c(8,15))
-# 
-# heatmap_8hpi <- heatmap.2(diffGenes_8_subset, 
-#                           Rowv=as.dendrogram(clustRows_8hpi), 
-#                           Colv=as.dendrogram(clustColumns_8hpi),
-#                           #RowSideColors=module.color,
-#                           col=rev(myheatcolors), scale='row', labRow=NA,
-#                           density.info="none", trace="none",  
-#                           cexRow=1, cexCol=1, margins=c(8,20))
-# 
-# heatmap_14hpi <- heatmap.2(diffGenes_14_subset, 
-#                           Rowv=as.dendrogram(clustRows_14hpi), 
-#                           Colv=as.dendrogram(clustColumns_14hpi),
-#                           #RowSideColors=module.color,
-#                           col=rev(myheatcolors), scale='row', labRow=NA,
-#                           density.info="none", trace="none",  
-#                           cexRow=1, cexCol=1, margins=c(8,20))
-# 
-# # heatmap_8vs1hpi <- heatmap.2(diffGenes_8vs1_subset, 
-# #                           Rowv=as.dendrogram(clustRows_8vs1hpi), 
-# #                           Colv=clustColumns_8vs1hpi,
-# #                           col=rev(myheatcolors), scale='row', labRow=TRUE,
-# #                           density.info="none", trace="none",  
-# #                           cexRow=1, cexCol=1, margins=c(8,20))
-
-# heatmap.2(diffGenes_allTP, 
-#           Rowv=as.dendrogram(clustRows), 
-#           Colv=clustColumns,
-#           RowSideColors=module.color,
-#           dendrogram = "row",
-#           col=rev(myheatcolors), scale='row', labRow=NA,
-#           density.info="none", trace="none",
-#           keysize = 1,
-#           cexRow=1, cexCol=1, margins=c(8,20))
-
-
-# Better plot
 module.assign <- cutree(clustRows, k=4)
-module.color <- Purples(length(unique(module.assign)))
+n.mods <- length(unique(module.assign))
+module.color <- brewer.pal(n = n.mods, name = "Purples")
 module.color <- module.color[as.vector(module.assign)]
-heatmap.2(diffGenes_allTP, 
-          Rowv=as.dendrogram(clustRows), 
-          Colv=clustColumns,
-          RowSideColors=module.color,
-          colsep = c(0,4,8,12,16,20,24,28,32),
-          rowsep = c(0,18,34,51,56),
-          sepcolor = c("black"),
-          sepwidth = c(0.05,0.05),
-          dendrogram = "row",
-          col=rev(myheatcolors), scale='row', labRow=NA,
-          density.info="none", trace="none",
-          keysize = 1,
-          cexRow=1, cexCol=1, margins=c(8,20))
-png("high_res_heatmap_bacteria.png", width = 8, height = 8, units = 'in', res = 600, bg = "transparent")
 
-heatmap.2(diffGenes_allTP, 
-          Rowv=as.dendrogram(clustRows), 
-          Colv=clustColumns,
-          RowSideColors=module.color,
-          colsep = c(0,4,8,12,16,20,24,28,32),
-          rowsep = c(0,18,34,51,56),
-          sepcolor = c("black"),
-          sepwidth = c(0.05,0.05),
-          dendrogram = "row",
-          col=rev(myheatcolors), scale='row', labRow=NA,
-          density.info="none", trace="none",
-          keysize = 1,
-          cexRow=1, cexCol=1, margins=c(8,20))
+pastels <- colorRampPalette(brewer.pal(9, "Pastel1"))
+sample.names <- factor(sub("_[0-9]+$", "", colnames(diffGenes_allTP)))
+groups.heat <- unique(sample.names)
+palette <- pastels(length(groups.heat))
+names(palette) <- groups.heat
+
+sample.color <- palette[sample.names]
+
+sample.color
+
+out_file <- "high_res_heatmap_bacteria.svg"
+
+svglite::svglite(filename = out_file, width = 8, height = 8)  # width/height in inches
+
+heatmap.2(
+  diffGenes_allTP, 
+  Rowv         = as.dendrogram(clustRows), 
+  Colv         = as.dendrogram(clustColumns),
+  RowSideColors= module.color,
+  ColSideColors= sample.color,
+  dendrogram   = "both",
+  col          = myheatcolors, 
+  scale        = "row", 
+  labRow       = TRUE,
+  density.info = "none", 
+  trace        = "none",
+  keysize      = 1,
+  cexRow       = 1, 
+  cexCol       = 0.5
+)
+
 dev.off()
+
+# Fix time variable
+targets$hpi_numeric <- as.numeric(gsub("hpi_", "", as.character(targets$hpi)))
+
+# Melt the expression matrix to long format and join metadata
+expr_long <- as.data.frame(log2.cpm.filtered.norm)
+colnames(expr_long) <- targets$sample
+expr_long$Gene <- rownames(expr_long)
+expr_long <- melt(expr_long, id.vars = "Gene", variable.name = "sample", value.name = "log2CPM")
+expr_long <- merge(expr_long, targets, by = "sample")
+
+# Calculate mean expression per gene, rep, treatment, time
+expr_mean <- expr_long %>%
+  group_by(Gene, Treatment, replicate, hpi_numeric) %>%
+  summarise(mean_log2CPM = mean(log2CPM, na.rm=TRUE), .groups="drop")
+
+
+to_plot_reps <- expr_long %>% filter(Gene %in% c("hprK", "caiA", "fmdE", "KK01_02980", "KK01_00290", "rtxA"))
+to_plot_means <- to_plot_reps %>% 
+  group_by(Gene, Treatment, hpi_numeric) %>%
+  summarise(mean_log2CPM = mean(log2CPM, na.rm=TRUE), .groups = "drop")
+
+sel_plots <- ggplot() +
+  geom_jitter(data = to_plot_reps, 
+             aes(x=as.factor(hpi_numeric), y=log2CPM, color=Treatment), width = 0.25, alpha=0.5) +
+  # mean points (optional for emphasis)
+  geom_point(data=to_plot_means,
+             aes(x=as.factor(hpi_numeric), y=mean_log2CPM, color=Treatment),
+             size=4, shape=18) +
+  scale_color_manual(values = c("Infected" = "red", "Uninfected" = "blue")) + 
+  facet_wrap(~Gene) +
+  theme_bw()
+ggsave(filename = "data_distributions_plots_single_genes.svg", plot = sel_plots)
