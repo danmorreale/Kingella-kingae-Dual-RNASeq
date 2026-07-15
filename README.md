@@ -1,5 +1,6 @@
 # _Kingella kingae_ Dual RNA-Seq
-DOI:  
+Molecular determinants of Kingella kingae translocation across polarized respiratory epithelium
+DOI:  [![DOI](https://zenodo.org/badge/647272024.svg)](https://doi.org/10.5281/zenodo.21384628)
 Authors: Morreale, Daniel P., Ana K. Cruz, Porsch, Eric A., Eva Agostino, Planet, Paul J, St. Geme III, Joseph W.
 
 University of Pennsylvania
