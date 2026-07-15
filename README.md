@@ -1,6 +1,6 @@
 # _Kingella kingae_ Dual RNA-Seq
 DOI:  
-Authors: Morreale, Daniel P., Porsch, Eric A., Planet, Paul J, St. Geme III, Joseph W.
+Authors: Morreale, Daniel P., Ana K. Cruz, Porsch, Eric A., Eva Agostino, Planet, Paul J, St. Geme III, Joseph W.
 
 University of Pennsylvania
 Childrens Hospital of Philadelphia
@@ -9,7 +9,7 @@ Please contact D. Morreale or J. St. Geme III with questions/concerns.
 
  
 ## Background 
-This repository contains the data and code used for the analysis of the Dual-RNA seq data reported in "TITLE" (Morreale _et al._, BioRxIV DOI:). Below you will find a detailed methods section for the analysis, which can also be found in the manuscript. Read data can be found in the [Sequence Read Archive](https://www.ncbi.nlm.nih.gov/sra) in the BioProject **PRJNA978100**. Please contact the authors with any questions/concerns. 
+This repository contains the data and code used for the analysis of the Dual-RNA seq data reported in "Molecular determinants of Kingella kingae translocation across polarized respiratory epithelium". Below you will find a detailed methods section for the analysis, which can also be found in the manuscript. Read data can be found in the Gene Expression Omnibus GSE334948. Please contact the authors with any questions/concerns. 
 
 
 ## Methods
@@ -82,7 +82,7 @@ Quality of sequences was assessed using FastQC v. 0.12.1. Trimming and assembly 
 Final annotations were produced using Bakta v. 1.7.0. The full bakta database (v.5.0) was downloaded on 3/31/2023. Annotation was performed with the following flags:--prefix KK01 -- genus Kingella --species kingae --strain KK01 --gram ? --locus-tag KK01 -t 8.
 
 #### Read sorting and quality control
-Reads were uploaded to NCBI SRA under BioProject (XXX). All samples were treated identically, regardless of the species we expected to find, until human and bacterial reads were separated. Reads underwent quality control with FastQC. To remove any potential contamination from sequence or library preparation, FastQ Screen was used to label and sort reads against the human genome, KK01 genome, and phiX, using default setting and the Bowtie2 aligner. Tagged reads were then sorted as follows: Infected samples were separated into reads that map exclusively to the KK01 predicted transcriptome and Human transcriptome (GRCh38), respectively. Uninfected controls were filtered to remove any reads that do not map to the human reference (GRCh38). Bacterial-only controls were filtered to remove any reads that do not map to the KK01 reference. 
+Reads were uploaded to NCBI GEO GSE334948. All samples were treated identically, regardless of the species we expected to find, until human and bacterial reads were separated. Reads underwent quality control with FastQC. To remove any potential contamination from sequence or library preparation, FastQ Screen was used to label and sort reads against the human genome, KK01 genome, and phiX, using default setting and the Bowtie2 aligner. Tagged reads were then sorted as follows: Infected samples were separated into reads that map exclusively to the KK01 predicted transcriptome and Human transcriptome (GRCh38), respectively. Uninfected controls were filtered to remove any reads that do not map to the human reference (GRCh38). Bacterial-only controls were filtered to remove any reads that do not map to the KK01 reference. 
 
 Kallisto (v.0.48.0) was used to pseudoalign filtered reads to the human reference transcriptome (GRCh38, index downloaded directly from Kallisto documentation) or the KK01 genome. Reads not mapping to either genome were ingored during mapping and all subsequent analyses.
 
